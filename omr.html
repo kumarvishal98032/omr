@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pariksha OMR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: setup column on the left (exam, key, sheet link, blank sheet); scanning, results and photo check on the right. Stacks on phones. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#15222e; --muted:#5a6a78; --line:#d8dfe5;
+  --accent:#1d5fc0; --accent-ink:#ffffff; --soft:#e8f0fb;
+  --good:#17794a; --bad:#c0392b; --warn:#a85f00;
+  --font-body:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-head:'Space Grotesk','Inter',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161d; --surface:#17212b; --ink:#e7eef5; --muted:#93a4b3; --line:#2b3948;
+  --accent:#6aa6f5; --accent-ink:#08121d; --soft:#1b2c42;
+  --good:#4cc38a; --bad:#ff7b6b; --warn:#e8a54a; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0f161d; --surface:#17212b; --ink:#e7eef5; --muted:#93a4b3; --line:#2b3948;
+  --accent:#6aa6f5; --accent-ink:#08121d; --soft:#1b2c42;
+  --good:#4cc38a; --bad:#ff7b6b; --warn:#e8a54a; color-scheme:dark;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto}
+header.top{margin-bottom:18px}
+h1{font:700 28px/1.15 var(--font-head);margin:0 0 4px;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted)}
+h2{font:700 16px/1.2 var(--font-head);margin:0 0 12px}
+.grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+label{display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:10px}
+input[type=text],input[type=number],input[type=password],input[type=url],select,textarea{
+  display:block;width:100%;margin-top:4px;padding:8px 10px;font:inherit;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:6px}
+textarea{resize:vertical;min-height:54px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,.drop:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+button,.btn{font:600 13.5px var(--font-body);padding:8px 12px;border-radius:6px;border:1px solid var(--accent);
+  background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button.ghost,.btn.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hint{color:var(--muted);font-size:12.5px;margin:8px 0 0}
+.note{min-height:20px;font-size:13px;margin:10px 0 0}
+.ok{color:var(--good)} .err{color:var(--bad)} .warn{color:var(--warn)}
+.keybox{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;max-height:130px;overflow:auto}
+.chip{font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--soft);border-radius:4px;padding:2px 6px;white-space:nowrap}
+.chip.miss{background:transparent;border:1px dashed var(--line);color:var(--muted)}
+.drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:22px 14px;text-align:center;cursor:pointer;
+  color:var(--muted);margin:0}
+.drop.over{border-color:var(--accent);background:var(--soft)}
+.drop strong{display:block;color:var(--ink);font-size:15px;margin-bottom:2px}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--soft)}
+tbody tr.sel{background:var(--soft)}
+td.num,th.num{text-align:right}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:99px;border:1px solid currentColor}
+.dhead{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:10px}
+.dhead input{width:210px;font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.score{font:700 26px var(--font-head)} .score small{font:500 13px var(--font-body);color:var(--muted)}
+ul.flags{margin:0 0 10px;padding-left:18px;color:var(--warn);font-size:13px}
+canvas#ov{width:100%;height:auto;display:block;border-radius:6px;border:1px solid var(--line);cursor:crosshair}
+canvas#blank{width:100%;max-width:240px;height:auto;display:block;border:1px solid var(--line);margin-top:10px}
+details{margin-top:10px;font-size:13px} summary{cursor:pointer;color:var(--accent);font-weight:600}
+details ol{padding-left:18px;margin:8px 0 0} details li{margin-bottom:4px}
+code{font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--soft);padding:1px 4px;border-radius:3px}
+.empty{color:var(--muted);padding:14px 4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <h1>Pariksha OMR</h1>
+  <p>Photograph answer sheets, check them against your answer key, and send each student's marks to your Google Sheet.</p>
+</header>
+
+<main class="grid">
+<div class="col">
+
+  <section class="panel">
+    <h2>Exam and marking</h2>
+    <label>Exam name <input type="text" id="exam"></label>
+    <div class="three">
+      <label>Questions <input type="number" id="nQ" min="1" max="100"></label>
+      <label>Options <select id="opts"><option value="4">A–D</option><option value="5">A–E</option></select></label>
+      <label>Reg. digits <input type="number" id="regDigits" min="1" max="10"></label>
+    </div>
+    <div class="two">
+      <label>Marks per correct <input type="number" id="pos" step="0.25" min="0"></label>
+      <label>Minus per wrong <input type="number" id="neg" step="0.25" min="0"></label>
+    </div>
+    <p class="hint">Blank and double-marked answers score 0. Questions without a key answer are skipped.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Answer key</h2>
+    <div class="row">
+      <button id="keySheet">Load from Google Sheet</button>
+      <label class="btn ghost" style="margin:0">Upload Excel / CSV<input type="file" id="keyFile" accept=".xlsx,.xls,.csv" hidden></label>
+    </div>
+    <label style="margin-top:12px">Or type the answers in order
+      <textarea id="keyText" placeholder="ABCDDACB…"></textarea></label>
+    <button class="ghost" id="keyType">Use typed answers</button>
+    <div id="keyNote" class="note"></div>
+    <div id="keyBox" class="keybox"></div>
+    <p class="hint">Excel layout: question number in column A, answer letter in column B. A single column of letters also works.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Google Sheet link</h2>
+    <label>Apps Script web app URL <input type="url" id="url" placeholder="https://script.google.com/macros/s/…/exec"></label>
+    <div class="two">
+      <label>Passcode <input type="password" id="pass" autocomplete="off"></label>
+      <label>Answer key tab <input type="text" id="keyTab"></label>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin:0 0 10px"><input type="checkbox" id="auto" style="width:auto;margin:0"> Save each sheet automatically when the registration number reads clearly</label>
+    <button class="ghost" id="test">Test connection</button>
+    <div id="linkNote" class="note"></div>
+    <details><summary>One-time setup</summary>
+      <ol>
+        <li>Open your Google Sheet, then Extensions, then Apps Script.</li>
+        <li>Paste the contents of <code>Code.gs</code>, set your own passcode at the top, and save.</li>
+        <li>Deploy, New deployment, type Web app. Execute as Me, access Anyone. Copy the URL.</li>
+        <li>Paste the URL and passcode above, then press Test connection.</li>
+        <li>Optional: add a <code>Students</code> tab (registration number, name) to see names while scanning.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2>Blank OMR sheet</h2>
+    <p class="hint" style="margin-top:0">Print this for students. It matches the settings above, so change them first. Keep the four black corner squares and the bar at the top visible when scanning.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="mkBlank">Preview sheet</button>
+      <a class="btn ghost" id="dlBlank" href="#" download="omr-sheet.png" hidden>Download PNG</a>
+    </div>
+    <canvas id="blank" hidden></canvas>
+  </section>
+</div>
+
+<div class="col">
+  <section class="panel">
+    <h2>Scan sheets</h2>
+    <label class="drop" id="drop" tabindex="0">
+      <strong>Add photos of filled sheets</strong>
+      Tap to choose or take photos, or drop them here. Several at once is fine.
+      <input type="file" id="files" accept="image/*" multiple>
+    </label>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="demo">Try a demo sheet</button>
+    </div>
+    <div id="note" class="note" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <h2 style="margin:0">Results</h2>
+      <div class="row">
+        <button class="ghost" id="saveAll">Save all to sheet</button>
+        <button class="ghost" id="xlsx">Download Excel</button>
+        <button class="ghost" id="clear">Clear</button>
+      </div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Reg. no.</th><th>Name</th><th class="num">Correct</th><th class="num">Wrong</th><th class="num">Blank</th><th class="num">Marks</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div id="empty" class="empty">No sheets scanned yet. Add photos above, or try the demo sheet.</div>
+  </section>
+
+  <section class="panel" id="detail" hidden>
+    <div class="dhead">
+      <label style="margin:0">Registration number
+        <input type="text" id="dReg" inputmode="numeric" autocomplete="off"></label>
+      <div class="score" id="dScore"></div>
+    </div>
+    <div id="dName" class="hint" style="margin:-4px 0 10px"></div>
+    <ul class="flags" id="flags"></ul>
+    <canvas id="ov"></canvas>
+    <p class="hint">Green is correct, red is wrong, dashed green shows the right answer, amber is unanswered. Click a bubble on the photo to correct a misread.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="dSave">Save to sheet</button>
+      <button class="ghost" id="dDel">Remove</button>
+      <span id="dNote" class="note" style="margin:0"></span>
+    </div>
+  </section>
+</div>
+</main>
+</div>
+
+<script>
+'use strict';
+/* ---------- constants and state ---------- */
+const CW=1000, CH=1414, R=11, PER_BLOCK=25;
+const LS='pariksha-omr-v1';
+const S={cfg:{exam:'Chemistry Test 1',nQ:60,opts:4,regDigits:8,pos:4,neg:1,url:'',pass:'',keyTab:'AnswerKey',auto:true},key:[],scans:[],sel:-1};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function loadState(){try{const j=JSON.parse(localStorage.getItem(LS)||'null');if(j){Object.assign(S.cfg,j.cfg||{});S.key=j.key||[];}}catch(e){}}
+function persist(){try{localStorage.setItem(LS,JSON.stringify({cfg:S.cfg,key:S.key}));}catch(e){}}
+function writeInputs(){const c=S.cfg;$('exam').value=c.exam;$('nQ').value=c.nQ;$('opts').value=c.opts;$('regDigits').value=c.regDigits;
+  $('pos').value=c.pos;$('neg').value=c.neg;$('url').value=c.url;$('pass').value=c.pass;$('keyTab').value=c.keyTab;$('auto').checked=c.auto;}
+function readCfg(){const c=S.cfg,n=(id,lo,hi,d)=>{const v=parseFloat($(id).value);return Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):d;};
+  c.exam=$('exam').value.trim()||'OMR Answer Sheet';c.nQ=Math.round(n('nQ',1,100,c.nQ));c.opts=+$('opts').value;
+  c.regDigits=Math.round(n('regDigits',1,10,c.regDigits));c.pos=n('pos',0,100,c.pos);c.neg=n('neg',0,100,c.neg);
+  c.url=$('url').value.trim();c.pass=$('pass').value;c.keyTab=$('keyTab').value.trim()||'AnswerKey';c.auto=$('auto').checked;persist();return c;}
+
+/* ---------- sheet geometry (same for printing and reading) ---------- */
+function layout(cfg){
+  const reg=[];for(let c=0;c<cfg.regDigits;c++){const col=[];for(let d=0;d<10;d++)col.push([100+c*38,290+d*28]);reg.push(col);}
+  const q=[];for(let i=0;i<cfg.nQ;i++){const b=Math.floor(i/PER_BLOCK),r=i%PER_BLOCK,x0=70+b*215,row=[];
+    for(let j=0;j<cfg.opts;j++)row.push([x0+62+j*34,610+r*28]);q.push(row);}
+  return {reg,q};
+}
+const MARKERS=[[40,40],[960,40],[960,1374],[40,1374]]; // TL, TR, BR, BL
+const SPOTS=[[500,40],[500,1374],[40,707],[960,707]];  // first is the dark orientation bar
+
+function drawSheet(c,s,cfg,fill){
+  c.width=Math.round(CW*s);c.height=Math.round(CH*s);
+  const g=c.getContext('2d');g.scale(s,s);g.fillStyle='#fff';g.fillRect(0,0,CW,CH);g.fillStyle='#000';
+  MARKERS.forEach(([x,y])=>g.fillRect(x-20,y-20,40,40));
+  g.fillRect(440,28,120,24);
+  g.textAlign='center';g.font='700 30px Arial,sans-serif';g.fillText(cfg.exam,500,106,700);
+  g.textAlign='left';g.font='15px Arial,sans-serif';g.fillStyle='#222';
+  g.fillText('Name',90,160);g.fillText('Date',640,160);g.fillText('Class / batch',90,196);g.fillText('Signature',640,196);
+  g.strokeStyle='#222';g.lineWidth=1;g.beginPath();
+  [[140,162,560],[680,162,930],[190,198,560],[720,198,930]].forEach(([a,y,b])=>{g.moveTo(a,y);g.lineTo(b,y);});g.stroke();
+  g.font='600 13px Arial,sans-serif';g.fillText('REGISTRATION NUMBER',90,228);
+  const L=layout(cfg);
+  g.lineWidth=1.2;
+  L.reg.forEach(col=>g.strokeRect(col[0]-15,236,30,34));
+  g.font='13px Arial,sans-serif';g.textAlign='center';
+  for(let d=0;d<10;d++)g.fillText(String(d),66,290+d*28+5);
+  g.textAlign='left';g.font='14px Arial,sans-serif';g.fillStyle='#222';
+  ['Instructions','Use a black or blue pen, or a dark pencil.','Fill each bubble completely.','Mark one bubble per question.',
+   'Write the registration number in','the boxes, then fill one bubble','under each digit.'].forEach((t,i)=>{
+    g.font=(i?'14px':'600 14px')+' Arial,sans-serif';g.fillText(t,570,250+i*24);});
+  g.fillStyle='#000';g.strokeStyle='#000';
+  const bubble=(x,y,on)=>{g.lineWidth=1.5;g.beginPath();g.arc(x,y,R,0,7);g.stroke();
+    if(on){const j=()=> (Math.random()-.5)*2;g.fillStyle='#1b1b30';g.beginPath();g.arc(x+j(),y+j(),9.3,0,7);g.fill();g.fillStyle='#000';}};
+  const regSel=fill&&fill.reg?String(fill.reg).split('').map(Number):[];
+  L.reg.forEach((col,c)=>col.forEach(([x,y],d)=>bubble(x,y,regSel[c]===d)));
+  const blocks=Math.ceil(cfg.nQ/PER_BLOCK);
+  for(let b=0;b<blocks;b++){const x0=70+b*215;g.font='600 13px Arial,sans-serif';g.textAlign='center';
+    for(let j=0;j<cfg.opts;j++)g.fillText(String.fromCharCode(65+j),x0+62+j*34,590);}
+  g.font='13px Arial,sans-serif';
+  L.q.forEach((row,i)=>{const b=Math.floor(i/PER_BLOCK),x0=70+b*215;g.textAlign='right';g.fillText(String(i+1),x0+38,row[0][1]+5);
+    const a=fill&&fill.ans?fill.ans[i]:'';row.forEach(([x,y],j)=>bubble(x,y,a&&a.charCodeAt(0)-65===j&&a.length===1));
+    if(fill&&fill.ans&&fill.ans[i]==='*')row.slice(0,2).forEach(([x,y])=>bubble(x,y,true));});
+  g.textAlign='center';g.font='12px Arial,sans-serif';g.fillStyle='#444';
+  g.fillText('Keep the four black squares and the top bar clear. Do not fold, staple or stain this sheet.',500,1328);
+}
+
+/* ---------- maths: homography ---------- */
+function solve(A,b){const n=b.length;
+  for(let i=0;i<n;i++){let p=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[p][i]))p=r;
+    [A[i],A[p]]=[A[p],A[i]];[b[i],b[p]]=[b[p],b[i]];
+    for(let r=i+1;r<n;r++){const f=A[r][i]/A[i][i];for(let c=i;c<n;c++)A[r][c]-=f*A[i][c];b[r]-=f*b[i];}}
+  const x=new Array(n);for(let i=n-1;i>=0;i--){let s=b[i];for(let c=i+1;c<n;c++)s-=A[i][c]*x[c];x[i]=s/A[i][i];}return x;}
+function homography(src,dst){const A=[],b=[];
+  for(let i=0;i<4;i++){const [x,y]=src[i],[u,v]=dst[i];
+    A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v);}
+  return solve(A,b);}
+function mapPt(h,x,y){const w=h[6]*x+h[7]*y+1;return [(h[0]*x+h[1]*y+h[2])/w,(h[3]*x+h[4]*y+h[5])/w];}
+
+/* ---------- image analysis ---------- */
+function binarise(canvas){
+  const w=canvas.width,h=canvas.height,d=canvas.getContext('2d').getImageData(0,0,w,h).data;
+  const gray=new Float32Array(w*h);for(let i=0,j=0;i<gray.length;i++,j+=4)gray[i]=.299*d[j]+.587*d[j+1]+.114*d[j+2];
+  const W1=w+1,I=new Float64Array(W1*(h+1));
+  for(let y=0;y<h;y++){let row=0;for(let x=0;x<w;x++){row+=gray[y*w+x];I[(y+1)*W1+x+1]=I[y*W1+x+1]+row;}}
+  const rad=Math.round(Math.max(w,h)/12),bin=new Uint8Array(w*h);
+  for(let y=0;y<h;y++){const y0=Math.max(0,y-rad),y1=Math.min(h,y+rad+1);
+    for(let x=0;x<w;x++){const x0=Math.max(0,x-rad),x1=Math.min(w,x+rad+1);
+      const sum=I[y1*W1+x1]-I[y0*W1+x1]-I[y1*W1+x0]+I[y0*W1+x0],mean=sum/((x1-x0)*(y1-y0));
+      bin[y*w+x]=gray[y*w+x]<mean*.72?1:0;}}
+  return bin;
+}
+function findMarkers(bin,w,h){
+  const base=Math.max(w,h),minD=base*.012,maxD=base*.08,rw=Math.round(w*.3),rh=Math.round(h*.3);
+  const regions=[[0,0],[w-rw,0],[w-rw,h-rh],[0,h-rh]],corners=[[0,0],[w,0],[w,h],[0,h]],out=[];
+  const vis=new Uint8Array(w*h);
+  for(let k=0;k<4;k++){const [rx,ry]=regions[k];let best=null,bd=1e18;
+    for(let y=ry;y<ry+rh;y++)for(let x=rx;x<rx+rw;x++){const i0=y*w+x;if(!bin[i0]||vis[i0])continue;
+      const st=[i0];vis[i0]=1;let n=0,sx=0,sy=0,x0=x,x1=x,y0=y,y1=y;
+      while(st.length){const i=st.pop(),px=i%w,py=(i-px)/w;n++;sx+=px;sy+=py;
+        if(px<x0)x0=px;if(px>x1)x1=px;if(py<y0)y0=py;if(py>y1)y1=py;
+        const nb=[px>rx?i-1:-1,px<rx+rw-1?i+1:-1,py>ry?i-w:-1,py<ry+rh-1?i+w:-1];
+        for(const j of nb)if(j>=0&&bin[j]&&!vis[j]){vis[j]=1;st.push(j);}}
+      const bw=x1-x0+1,bh=y1-y0+1;
+      if(bw<minD||bh<minD||bw>maxD||bh>maxD)continue;
+      const asp=bw/bh;if(asp<.6||asp>1.65)continue;if(n/(bw*bh)<.5)continue;
+      const cx=sx/n,cy=sy/n,dd=(cx-corners[k][0])**2+(cy-corners[k][1])**2;
+      if(dd<bd){bd=dd;best=[cx,cy];}}
+    if(!best)return null;out.push(best);}
+  return out;
+}
+function inkRatio(H,bin,w,h,cx,cy){let n=0,d=0;
+  for(let dy=-7;dy<=7;dy+=1.75)for(let dx=-7;dx<=7;dx+=1.75){if(dx*dx+dy*dy>49)continue;
+    const p=mapPt(H,cx+dx,cy+dy),x=Math.round(p[0]),y=Math.round(p[1]);if(x<0||y<0||x>=w||y>=h)continue;n++;d+=bin[y*w+x];}
+  return n?d/n:0;}
+function pick(r){const t=.5,s=r.map((v,i)=>[v,i]).sort((a,b)=>b[1]-a[1]).sort((a,b)=>b[0]-a[0]);
+  if(s[0][0]<t)return -1;if(s.length>1&&s[1][0]>=t&&s[0][0]-s[1][0]<.3)return -2;return s[0][1];}
+
+function analyse(canvas,cfg){
+  const w=canvas.width,h=canvas.height,bin=binarise(canvas),m=findMarkers(bin,w,h);
+  if(!m)return {err:'Could not find all four black corner squares. Keep the whole sheet in the photo, flat and well lit.'};
+  let best=null;
+  for(let k=0;k<4;k++){const dst=MARKERS.map((_,i)=>m[(i+k)%4]),H=homography(MARKERS,dst);
+    const sp=SPOTS.map(([x,y])=>inkRatio(H,bin,w,h,x,y)),score=sp[0]-Math.max(sp[1],sp[2],sp[3]);
+    if(!best||score>best.score)best={score,H};}
+  if(best.score<.4)return {err:'Could not tell which way up the sheet is. Make sure the black bar at the top edge is visible.'};
+  const H=best.H,L=layout(cfg),flags=[];
+  let reg='';L.reg.forEach((col,c)=>{const p=pick(col.map(([x,y])=>inkRatio(H,bin,w,h,x,y)));
+    if(p>=0)reg+=p;else{reg+='?';flags.push(p===-1?`Registration digit ${c+1} is blank`:`Registration digit ${c+1} has two bubbles filled`);}});
+  const answers=L.q.map((row,i)=>{const p=pick(row.map(([x,y])=>inkRatio(H,bin,w,h,x,y)));
+    if(p===-2)flags.push(`Q${i+1} has more than one bubble filled`);return p>=0?String.fromCharCode(65+p):p===-2?'*':'';});
+  return {H,reg,answers,flags,w,h};
+}
+
+/* ---------- scoring ---------- */
+function scoreOf(s){const o={correct:0,wrong:0,blank:0,marks:0,max:0,keyed:0};
+  for(let i=0;i<s.cfg.nQ;i++){const k=S.key[i];if(!k)continue;o.keyed++;o.max+=S.cfg.pos;const a=s.answers[i];
+    if(!a||a==='*')o.blank++;else if(a===k){o.correct++;o.marks+=S.cfg.pos;}else{o.wrong++;o.marks-=S.cfg.neg;}}
+  return o;}
+const fmt=n=>Number.isInteger(n)?String(n):n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+
+/* ---------- Google Sheet calls ---------- */
+const linked=()=>/^https:\/\/script\.google\.com\//.test(S.cfg.url);
+async function apiGet(params){const u=new URL(S.cfg.url);for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);
+  u.searchParams.set('pass',S.cfg.pass);const r=await fetch(u);return r.json();}
+async function apiPost(body){const r=await fetch(S.cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+  body:JSON.stringify({...body,pass:S.cfg.pass})});return r.json();}
+function setNote(id,msg,cls){const e=$(id);e.textContent=msg;e.className='note '+(cls||'');}
+
+/* ---------- answer key ---------- */
+function parseKeyRows(rows){const key=[];
+  for(const row of rows){const cells=(row||[]).map(c=>String(c??'').trim());let li=-1;
+    for(let i=cells.length-1;i>=0;i--)if(/^\(?[A-Ea-e]\)?\.?$/.test(cells[i])){li=i;break;}
+    if(li<0)continue;const letter=cells[li].replace(/[^A-Za-z]/g,'').toUpperCase();let q=null;
+    for(let i=0;i<li;i++){const m=cells[i].match(/^(\d+)[.)]?$/);if(m){q=+m[1];break;}}
+    if(!q||q<1)q=key.length+1;key[q-1]=letter;}
+  return Array.from(key,x=>x||'');}
+function setKey(key,source){S.key=key;persist();renderKey();
+  const n=key.filter(Boolean).length;
+  setNote('keyNote',`${n} answers loaded from ${source}.`+(n!==S.cfg.nQ?` Your exam has ${S.cfg.nQ} questions.`:''),n===S.cfg.nQ?'ok':'warn');
+  renderTable();}
+function renderKey(){$('keyBox').innerHTML=S.key.length?S.key.map((k,i)=>`<span class="chip${k?'':' miss'}">${i+1} ${k||'–'}</span>`).join(''):'';}
+$('keyFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;
+  try{const wb=XLSX.read(await f.arrayBuffer());const name=wb.SheetNames.find(n=>/key|answer/i.test(n))||wb.SheetNames[0];
+    const key=parseKeyRows(XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:false}));
+    if(!key.length)return setNote('keyNote','No answer letters (A to E) found in that file.','err');setKey(key,f.name);}
+  catch(err){setNote('keyNote','Could not read that file.','err');}e.target.value='';});
+$('keyType').addEventListener('click',()=>{const key=$('keyText').value.toUpperCase().replace(/[^A-E]/g,'').split('');
+  if(!key.length)return setNote('keyNote','Type the answer letters, for example ABCDA…','err');setKey(key,'what you typed');});
+$('keySheet').addEventListener('click',async()=>{readCfg();
+  if(!linked())return setNote('keyNote','Add the Apps Script URL in the Google Sheet panel first.','err');
+  setNote('keyNote','Loading…');
+  try{const r=await apiGet({action:'key',tab:S.cfg.keyTab});if(!r.ok)return setNote('keyNote',r.error||'Could not load the key.','err');
+    setKey(r.key,'your Google Sheet');}catch(e){setNote('keyNote','Could not reach the sheet. Check the URL and that access is set to Anyone.','err');}});
+$('test').addEventListener('click',async()=>{readCfg();
+  if(!linked())return setNote('linkNote','Paste the web app URL that starts with https://script.google.com/','err');
+  setNote('linkNote','Testing…');
+  try{const r=await apiGet({action:'ping'});setNote('linkNote',r.ok?r.message:(r.error||'Failed.'),r.ok?'ok':'err');}
+  catch(e){setNote('linkNote','Could not reach the sheet. Check the URL and that access is set to Anyone.','err');}});
+
+/* ---------- blank sheet ---------- */
+$('mkBlank').addEventListener('click',()=>{readCfg();const c=$('blank');drawSheet(c,2,S.cfg);c.hidden=false;
+  const a=$('dlBlank');a.href=c.toDataURL('image/png');a.hidden=false;});
+
+/* ---------- scanning ---------- */
+function shrink(src){const sc=Math.min(1,1600/Math.max(src.width,src.height));if(sc===1)return src;
+  const c=document.createElement('canvas');c.width=Math.round(src.width*sc);c.height=Math.round(src.height*sc);
+  c.getContext('2d').drawImage(src,0,0,c.width,c.height);return c;}
+async function fileToCanvas(f){let bmp;try{bmp=await createImageBitmap(f,{imageOrientation:'from-image'});}catch(e){bmp=await createImageBitmap(f);}
+  const c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;c.getContext('2d').drawImage(bmp,0,0);return shrink(c);}
+async function addFiles(files){readCfg();let n=0;
+  for(const f of files){setNote('note',`Reading ${f.name} (${++n} of ${files.length})…`);await new Promise(r=>setTimeout(r,20));
+    try{await handleCanvas(await fileToCanvas(f),f.name);}catch(e){pushScan({file:f.name,err:'Could not open this image.'});}}
+  setNote('note',`${n} sheet${n===1?'':'s'} processed.`,'ok');}
+function pushScan(s){s.id=S.scans.length+1;s.saved='';S.scans.push(s);S.sel=S.scans.length-1;renderTable();renderDetail();return s;}
+async function handleCanvas(cv,name){const cfg={...S.cfg};
+  const r=analyse(cv,cfg);if(r.err)return pushScan({file:name,err:r.err});
+  const s=pushScan({file:name,cfg,reg:r.reg,answers:r.answers,flags:r.flags,H:r.H,img:cv.toDataURL('image/jpeg',.82),name:''});
+  if(linked()&&!r.reg.includes('?')){lookupName(s);if(S.cfg.auto&&S.key.some(Boolean))await saveScan(s);}}
+async function lookupName(s){if(!linked()||!s.reg||s.reg.includes('?'))return;
+  try{const r=await apiGet({action:'student',reg:s.reg});if(r.ok){s.name=r.name||'';renderTable();if(S.scans[S.sel]===s)renderDetail();}}catch(e){}}
+async function saveScan(s){
+  if(s.err)return;
+  if(!linked()){s.saveMsg='Add the Apps Script URL first. Use Download Excel meanwhile.';s.saved='err';renderTable();renderDetail();return;}
+  if(!S.key.some(Boolean)){s.saveMsg='Load the answer key first.';s.saved='err';renderTable();renderDetail();return;}
+  if(!/^\d+$/.test(s.reg)){s.saveMsg='Fix the registration number first.';s.saved='err';renderTable();renderDetail();return;}
+  s.saved='busy';renderTable();const sc=scoreOf(s);
+  try{const r=await apiPost({action:'save',exam:S.cfg.exam,reg:s.reg,correct:sc.correct,wrong:sc.wrong,unattempted:sc.blank,
+      marks:sc.marks,max:sc.max,answers:s.answers.map(a=>a||'-').join('')});
+    if(r.ok){s.saved='ok';s.name=r.name||s.name;s.saveMsg=r.updated?'Updated the existing row.':'Saved.';}else{s.saved='err';s.saveMsg=r.error||'Save failed.';}}
+  catch(e){s.saved='err';s.saveMsg='Could not reach the sheet.';}
+  s.savedKey=JSON.stringify([s.reg,s.answers,S.key]);renderTable();if(S.scans[S.sel]===s)renderDetail();}
+
+/* ---------- results table ---------- */
+function statusOf(s){if(s.err)return ['Failed','err'];if(s.saved==='busy')return ['Saving…','warn'];
+  if(s.saved==='ok')return ['Saved','ok'];if(s.saved==='err')return ['Not saved','err'];
+  if(s.reg.includes('?')||s.flags.length)return ['Check','warn'];return ['Ready',''];}
+function renderTable(){const body=$('rows');$('empty').hidden=S.scans.length>0;
+  body.innerHTML=S.scans.map((s,i)=>{const [st,cls]=statusOf(s);
+    if(s.err)return `<tr data-i="${i}" class="${i===S.sel?'sel':''}"><td>${s.id}</td><td colspan="6" class="err">${esc(s.file)}: ${esc(s.err)}</td><td><span class="pill err">${st}</span></td></tr>`;
+    const sc=scoreOf(s),has=sc.keyed>0;
+    return `<tr data-i="${i}" class="${i===S.sel?'sel':''}"><td>${s.id}</td><td>${esc(s.reg)}</td><td>${esc(s.name)}</td>
+      <td class="num">${has?sc.correct:'–'}</td><td class="num">${has?sc.wrong:'–'}</td><td class="num">${has?sc.blank:'–'}</td>
+      <td class="num"><strong>${has?fmt(sc.marks)+' / '+fmt(sc.max):'–'}</strong></td><td><span class="pill ${cls}">${st}</span></td></tr>`;}).join('');}
+$('rows').addEventListener('click',e=>{const tr=e.target.closest('tr');if(!tr)return;S.sel=+tr.dataset.i;renderTable();renderDetail();});
+
+/* ---------- detail view with overlay ---------- */
+const imgCache=new Map();
+function loadImg(src){if(imgCache.has(src))return imgCache.get(src);const p=new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});imgCache.set(src,p);return p;}
+async function renderDetail(){const s=S.scans[S.sel],box=$('detail');
+  if(!s||s.err){box.hidden=true;return;}box.hidden=false;
+  if(document.activeElement!==$('dReg'))$('dReg').value=s.reg;
+  const sc=scoreOf(s);$('dScore').innerHTML=sc.keyed?`${fmt(sc.marks)} <small>/ ${fmt(sc.max)} marks</small>`:'<small>Load the answer key to see marks</small>';
+  $('dName').textContent=s.name?`Student: ${s.name}`:'';
+  $('flags').innerHTML=(s.flags||[]).map(f=>`<li>${esc(f)}</li>`).join('');
+  $('dNote').textContent=s.saveMsg||'';$('dNote').className='note '+(s.saved==='ok'?'ok':s.saved==='err'?'err':'');
+  const img=await loadImg(s.img);if(S.scans[S.sel]!==s)return;
+  const cv=$('ov'),g=cv.getContext('2d');cv.width=img.width;cv.height=img.height;g.drawImage(img,0,0);
+  const L=layout(s.cfg),H=s.H;
+  const ring=(cx,cy,r,col,dash,fill)=>{const[p,q]=[mapPt(H,cx,cy),mapPt(H,cx+r,cy)],rad=Math.hypot(q[0]-p[0],q[1]-p[1]);
+    g.beginPath();g.arc(p[0],p[1],rad+2,0,7);g.setLineDash(dash?[4,3]:[]);g.lineWidth=3;g.strokeStyle=col;if(fill){g.fillStyle=col+'55';g.fill();}g.stroke();};
+  L.reg.forEach((col,c)=>{const ch=s.reg[c];if(/\d/.test(ch)){const [x,y]=col[+ch];ring(x,y,R,'#1d5fc0',false,true);}});
+  L.q.forEach((row,i)=>{const a=s.answers[i],k=S.key[i];const di=a&&a!=='*'?a.charCodeAt(0)-65:-1,ki=k?k.charCodeAt(0)-65:-1;
+    if(a==='*')row.forEach(([x,y])=>ring(x,y,R,'#a85f00',false,false));
+    if(di>=0){const [x,y]=row[di];ring(x,y,R,!k?'#1d5fc0':di===ki?'#17a35a':'#e0402f',false,true);}
+    if(ki>=0&&ki<row.length&&di!==ki){const [x,y]=row[ki];ring(x,y,R,di<0?'#d98a00':'#17a35a',true,false);}});
+  g.setLineDash([]);}
+$('ov').addEventListener('click',e=>{const s=S.scans[S.sel];if(!s||s.err)return;const cv=$('ov'),r=cv.getBoundingClientRect();
+  const px=(e.clientX-r.left)*cv.width/r.width,py=(e.clientY-r.top)*cv.height/r.height,L=layout(s.cfg);let best=null,bd=1e18;
+  L.q.forEach((row,i)=>row.forEach(([x,y],j)=>{const p=mapPt(s.H,x,y),q=mapPt(s.H,x+R,y),rad=Math.hypot(q[0]-p[0],q[1]-p[1]),d=Math.hypot(px-p[0],py-p[1]);
+    if(d<rad*1.6&&d<bd){bd=d;best=[i,j];}}));
+  if(!best)return;const [i,j]=best,l=String.fromCharCode(65+j);s.answers[i]=s.answers[i]===l?'':l;
+  s.flags=s.flags.filter(f=>!f.startsWith(`Q${i+1} `));s.saved='';s.saveMsg='Edited. Save again to update the sheet.';renderTable();renderDetail();});
+$('dReg').addEventListener('input',e=>{const s=S.scans[S.sel];if(!s)return;s.reg=e.target.value.replace(/\D/g,'');
+  e.target.value=s.reg;s.saved='';s.saveMsg='';s.name='';clearTimeout(window._rt);window._rt=setTimeout(()=>lookupName(s),500);renderTable();
+  $('dNote').textContent='';});
+$('dSave').addEventListener('click',()=>{const s=S.scans[S.sel];if(s)saveScan(s);});
+$('dDel').addEventListener('click',()=>{if(S.sel<0)return;S.scans.splice(S.sel,1);S.scans.forEach((s,i)=>s.id=i+1);S.sel=Math.min(S.sel,S.scans.length-1);renderTable();renderDetail();});
+$('saveAll').addEventListener('click',async()=>{for(const s of S.scans)if(!s.err&&s.saved!=='ok')await saveScan(s);setNote('note','Finished saving.','ok');});
+$('clear').addEventListener('click',()=>{S.scans=[];S.sel=-1;renderTable();renderDetail();});
+$('xlsx').addEventListener('click',()=>{const rows=S.scans.filter(s=>!s.err).map(s=>{const sc=scoreOf(s);
+  return {'Reg No':s.reg,'Name':s.name,'Exam':S.cfg.exam,'Correct':sc.correct,'Wrong':sc.wrong,'Unattempted':sc.blank,'Marks':sc.marks,'Max marks':sc.max,'Answers':s.answers.map(a=>a||'-').join('')};});
+  if(!rows.length)return setNote('note','Nothing to download yet.','warn');
+  const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'OMR_Results');XLSX.writeFile(wb,'OMR_results.xlsx');});
+
+/* ---------- inputs, drop zone, demo ---------- */
+$('files').addEventListener('change',e=>{addFiles([...e.target.files]);e.target.value='';});
+const drop=$('drop');
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>addFiles([...e.dataTransfer.files].filter(f=>f.type.startsWith('image/'))));
+['exam','nQ','opts','regDigits','pos','neg','url','pass','keyTab','auto'].forEach(id=>$(id).addEventListener('change',()=>{readCfg();renderTable();}));
+
+async function demo(){readCfg();const n=S.cfg.nQ,o=S.cfg.opts,reg=String(Math.floor(Math.random()*10**S.cfg.regDigits)).padStart(S.cfg.regDigits,'0'),ans=[];
+  for(let i=0;i<n;i++){const k=S.key[i],r=Math.random();ans.push(r<.08?'':k&&r<.75?k:String.fromCharCode(65+Math.floor(Math.random()*o)));}
+  const sheet=document.createElement('canvas');drawSheet(sheet,1.5,S.cfg,{reg,ans});
+  const W=1400,Hh=1800,ph=document.createElement('canvas');ph.width=W;ph.height=Hh;const g=ph.getContext('2d');
+  const gr=g.createLinearGradient(0,0,W,Hh);gr.addColorStop(0,'#5a4d40');gr.addColorStop(1,'#3d352d');g.fillStyle=gr;g.fillRect(0,0,W,Hh);
+  g.save();g.translate(W/2,Hh/2);g.rotate(.035);const sc=1180/sheet.width;g.shadowColor='rgba(0,0,0,.5)';g.shadowBlur=30;
+  g.drawImage(sheet,-sheet.width*sc/2,-sheet.height*sc/2,sheet.width*sc,sheet.height*sc);g.restore();
+  g.globalCompositeOperation='multiply';const lg=g.createLinearGradient(0,0,W,0);lg.addColorStop(0,'#ffffff');lg.addColorStop(1,'#c9c9c9');g.fillStyle=lg;g.fillRect(0,0,W,Hh);
+  await handleCanvas(shrink(ph),'demo-sheet.png');}
+$('demo').addEventListener('click',demo);
+
+loadState();writeInputs();renderKey();renderTable();
+if(S.key.length)setNote('keyNote',`${S.key.filter(Boolean).length} answers saved from last time.`,'ok');
+</script>
+</body>
+</html>
